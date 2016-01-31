@@ -87,9 +87,13 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+
     int priority;                       /* Priority. */
     int priority_dt;                    /* Donated priority. */
-    struct list donors;                 /* Threads donating priority */
+    struct list donors;                 /* Threads donating priority. */   
+    struct list_elem donor_elem;        /* Donor list element. */
+    struct lock *pending_lock;          /* Lock that thread is waiting to acquire. */
+
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -111,6 +115,7 @@ struct thread
 extern bool thread_mlfqs;
 
 bool priority_less_than(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool donor_less_than(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void thread_init (void);
 void thread_start (void);
@@ -130,14 +135,16 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_check_yield (void);
 void thread_sleep (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+int update_priority_dt (struct thread *t);
 int thread_get_priority (void);
-int thread_get_priority_2 (struct thread *t);
+int thread_get_priority_spec (struct thread *t);
 void thread_set_priority (int);
 
 int thread_get_nice (void);
