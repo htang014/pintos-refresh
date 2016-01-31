@@ -11,6 +11,8 @@ struct semaphore
     struct list waiters;        /* List of waiting threads. */
   };
 
+static struct list lock_holders;
+
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);

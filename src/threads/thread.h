@@ -89,10 +89,11 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
 
     int priority;                       /* Priority. */
-    int priority_dt;                    /* Donated priority. */
+    int *priority_dt;                   /* Donated priority. */
     struct list donors;                 /* Threads donating priority. */   
     struct list_elem donor_elem;        /* Donor list element. */
     struct lock *pending_lock;          /* Lock that thread is waiting to acquire. */
+    struct list_elem lock_elem;         /* Lock holders list element. */
 
     struct list_elem allelem;           /* List element for all threads list. */
 
