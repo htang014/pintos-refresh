@@ -88,12 +88,17 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
 
+    void *aux;				/* Auxillary pointer from thread_create(). */
+
     int priority;                       /* Priority. */
     int *priority_dt;                   /* Donated priority. */
     struct list donors;                 /* Threads donating priority. */   
     struct list_elem donor_elem;        /* Donor list element. */
     struct lock *pending_lock;          /* Lock that thread is waiting to acquire. */
     struct list_elem lock_elem;         /* Lock holders list element. */
+
+    struct list children;               /* List of thread's child threads. */
+    struct list_elem child_elem;        /* List element for child list. */
 
     struct list_elem allelem;           /* List element for all threads list. */
 
@@ -103,6 +108,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file *bin;                   /* Working file. */
 #endif
 
     /* Owned by thread.c. */
@@ -120,6 +126,7 @@ bool donor_less_than(const struct list_elem *a, const struct list_elem *b, void 
 
 void thread_init (void);
 void thread_start (void);
+void thread_panic (void);
 
 void thread_tick (int64_t current_ticks);
 void thread_print_stats (void);

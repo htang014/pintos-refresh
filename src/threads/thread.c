@@ -121,6 +121,13 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+/* Causes kernel panic. */
+void
+thread_panic (void)
+{
+  ASSERT (false);
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -173,7 +180,7 @@ bool priority_less_than (const struct list_elem *a,
   struct thread *a_thread = list_entry(a, struct thread, elem);
   struct thread *b_thread = list_entry(b, struct thread, elem);
 
-  return (*a_thread->priority_dt < *b_thread->priority_dt);
+  return (*a_thread->priority_dt <= *b_thread->priority_dt);
 }
 
 /* Donor priority less than comparator. */
@@ -201,7 +208,7 @@ bool donor_less_than (const struct list_elem *a,
 tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
-{ 
+{
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -230,6 +237,7 @@ thread_create (const char *name, int priority,
   kf->eip = NULL;
   kf->function = function;
   kf->aux = aux;
+  t->aux = aux;
 
   /* Stack frame for switch_entry(). */
   ef = alloc_frame (t, sizeof *ef);
@@ -239,10 +247,11 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
- 
+
+  //list_push_front (&thread_current ()->children, &t->child_elem);
+
   intr_set_level (old_level);
- 
-  /* Add to run queue. */
+   /* Add to run queue. */
   thread_unblock (t);
 
   thread_check_yield ();
@@ -593,12 +602,13 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->magic = THREAD_MAGIC;
 
-  /* Initializations for priority */
+  /* Initialize child list. */
+  list_init (&t->children);
+
+  /* Initializations for priority. */
   t->priority = priority;
-  //t->priority_dt = &t->priority;
   list_init (&t->donors);
   update_priority_dt (t);
-  //update_priority_dt (thread_current());
 
   list_push_back (&all_list, &t->allelem);
 }
