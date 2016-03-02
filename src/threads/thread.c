@@ -248,7 +248,9 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  //list_push_front (&thread_current ()->children, &t->child_elem);
+  list_push_front (&thread_current ()->children, &t->child_elem);
+
+  t->fd_next = 4;
 
   intr_set_level (old_level);
    /* Add to run queue. */
@@ -340,10 +342,16 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  printf ("%s: exit(%d)\n",  thread_current ()->name, 
+          thread_current ()->exit_status);
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
+
   intr_disable ();
+  thread_unblock (thread_current()->parent);
+  thread_block ();
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -601,6 +609,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->magic = THREAD_MAGIC;
+
+  list_init (&t->files);
 
   /* Initialize child list. */
   list_init (&t->children);
