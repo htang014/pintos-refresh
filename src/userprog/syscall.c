@@ -194,7 +194,7 @@ verify_user (const void *uaddr)
           && pagedir_get_page (thread_current ()->pagedir, uaddr) != NULL);
 }
 
-/* Find and return the file that has FD from within
+/* Find and return the file that pertains to FD from within
    the current thread's files list.
 
    RW_SEMA should be down before calling. */
@@ -206,10 +206,29 @@ struct file *get_file (int fd)
 
   for (e = list_begin (&cur->files); e != list_end (&cur->files);
        e = list_next (e)){
-
     f = list_entry (e, struct file_helper, file_elem);
     if (f->fd == fd)
       return f->file;
+  }
+  return NULL;
+}
+
+/* Find and return the file helper that contains FD from within
+   the current thread's files list.
+
+   RW_SEMA should be down before calling. */
+struct file_helper *get_file_helper (int fd)
+{
+  struct thread *cur = thread_current ();
+  struct list_elem *e;
+  struct file_helper *f;
+
+  for (e = list_begin (&cur->files); e != list_end (&cur->files);
+       e = list_next (e)){
+
+    f = list_entry (e, struct file_helper, file_elem);
+    if (f->fd == fd)
+      return f;
   }
   return NULL;
 }
@@ -387,8 +406,10 @@ int exec (const char *cmd_line)
 void close (int fd)
 {
   sema_down (&rw_sema);
-  struct file *f = get_file (fd);
-  file_close (f);
-  //list_remove (&f->file_elem);
+  struct file_helper *f = get_file_helper (fd);
+  if (f){
+    file_close (f->file);
+    list_remove (&f->file_elem);
+  }
   sema_up (&rw_sema);
 }
