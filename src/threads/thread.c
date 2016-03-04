@@ -210,6 +210,7 @@ thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
   struct thread *t;
+  struct thread *cur = thread_current ();
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
@@ -248,8 +249,16 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  list_push_front (&thread_current ()->children, &t->child_elem);
+  /* Initialize child-parent information. */
+  struct child_helper *c_h = malloc (sizeof (struct child_helper));
+  sema_init (&c_h->wait_sema, 0);
+  t->parent = cur;
+  t->c_h = c_h;
+  c_h->child = t;
+  c_h->tid = tid;
+  list_push_front (&cur->children, &c_h->child_elem);
 
+  /* Set initial file descriptor. */
   t->fd_next = 4;
 
   intr_set_level (old_level);
@@ -343,15 +352,14 @@ thread_exit (void)
 #endif
 
   printf ("%s: exit(%d)\n",  thread_current ()->name, 
-          thread_current ()->exit_status);
+          thread_current ()->c_h->exit_status);
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
 
   intr_disable ();
-  thread_unblock (thread_current()->parent);
-  thread_block ();
+  sema_up (&thread_current ()->c_h->wait_sema);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();

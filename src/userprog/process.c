@@ -57,6 +57,7 @@ push (uint8_t *kpage, size_t *offset, const void *buf, size_t size)
 tid_t
 process_execute (const char *file_name) 
 {
+  //struct child_helper c_h;
   struct exec_helper exec;
   char file_name_cpy[16];
   char thread_name[16];
@@ -81,8 +82,10 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute THREAD_NAME. */
   tid = thread_create (thread_name, PRI_DEFAULT, start_process, &exec);
+  sema_down (&process_get_child (tid)->wait_sema);
+  sema_up (&process_get_child (tid)->wait_sema);
+  //process_wait (tid);
   if (tid != TID_ERROR) {
-    process_wait (tid);
     if (!exec.ld_success){
       tid = TID_ERROR;
     }
@@ -98,10 +101,9 @@ start_process (void *exec_)
   struct intr_frame if_;
   struct exec_helper *exec = (struct exec_helper*)exec_;
   char *file_name = exec->file_name;
+  struct thread *cur = thread_current ();
   bool success;
-
-  thread_current ()->parent = exec->parent;
-
+ 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -109,10 +111,10 @@ start_process (void *exec_)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   success = load (file_name, &if_.eip, &if_.esp);
+  exec->ld_success = success;
   /* If load failed, quit. */
-  if (!success){
+  if (!success)
     exit (-1);
-  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -127,10 +129,10 @@ start_process (void *exec_)
 /* Scans the invoking thread's child list for one whose TID
    matches CHILD_TID.  Returns a pointer to this child if it
    exists or NULL otherwise.*/
-struct thread *
+struct child_helper *
 process_get_child (tid_t child_tid)
 {
-  
+  struct child_helper *c_h; 
   struct thread *cur = thread_current ();
   struct list_elem *e;
 
@@ -140,13 +142,14 @@ process_get_child (tid_t child_tid)
   enum intr_level old_level = intr_disable ();
   for (e = list_begin (&cur->children); e != list_end (&cur->children);
        e = list_next (e)) {
-    struct thread *child = list_entry (e, struct thread, child_elem);
-    if (child->tid == child_tid){
+    c_h = list_entry (e, struct child_helper, child_elem);
+    if (c_h->tid == child_tid){
       intr_set_level (old_level);
-      return child; 
+      return c_h; 
     }
   }
   intr_set_level (old_level);
+
   return NULL;
 }
 
@@ -160,22 +163,20 @@ int
 process_wait (tid_t child_tid) 
 {
   int status;
-  struct thread *child = process_get_child (child_tid);
-  enum intr_level old_level;  
-
-  if (!child)
+  struct child_helper *c_h = process_get_child (child_tid);
+  enum intr_level old_level; 
+ 
+  if (!c_h)
     return -1;
   
   old_level = intr_disable ();
 
-  thread_block();
+  sema_down (&c_h->wait_sema);
  
-  status = child->exit_status;
-  list_remove (&child->child_elem);
-  thread_unblock (child);
+  status = c_h->exit_status;
+  list_remove (&c_h->child_elem);
 
   intr_set_level (old_level);
-
   return status;
 }
 
@@ -313,10 +314,11 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
+  if (t->pagedir == NULL)
     goto done;
-  process_activate ();
 
+  process_activate ();
+  
   strlcpy (cmd_line_cpy, cmd_line, strlen(cmd_line) + 1);
   file_name_ptr = strtok_r (cmd_line_cpy, " ", &saveptr);
 

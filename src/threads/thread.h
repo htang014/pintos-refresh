@@ -86,7 +86,7 @@ struct thread
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
-    int exit_status;                    /* Exit error status. */
+    //int exit_status;                    /* Exit error status. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
 
@@ -104,7 +104,7 @@ struct thread
 
     struct thread *parent;              /* Pointer to parent thread. */
     struct list children;               /* List of thread's child threads. */
-    struct list_elem child_elem;        /* List element for child list. */
+    struct child_helper *c_h;
 
     struct list_elem allelem;           /* List element for all threads list. */
 
@@ -120,6 +120,15 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
     unsigned sleep_time;		/* Number of ticks that thread sleeps. */ 
+  };
+
+struct child_helper
+  {
+    tid_t tid;
+    struct thread *child;
+    struct list_elem child_elem;
+    struct semaphore wait_sema;
+    int exit_status;
   };
 
 struct file_helper

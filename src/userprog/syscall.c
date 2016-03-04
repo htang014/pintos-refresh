@@ -15,9 +15,17 @@ static char* copy_in_string (const char *us);
 static inline bool get_user (uint8_t *dst, const uint8_t *usrc);
 static bool verify_user (const void *uaddr);
 void exit (int status);
+int read (int fd, void *buffer, unsigned size);
 int write (int fd, const void *buffer, unsigned length);
 bool create (const char *file, unsigned initial_size);
 int open (const char *file);
+int filesize (int fd);
+int wait (int pid);
+bool remove (const char *file);
+void seek (int fd, unsigned position);
+unsigned tell (int fd);
+int exec (const char *cmd_line);
+void close (int fd);
 
 void
 syscall_init (void) 
@@ -42,6 +50,7 @@ syscall_handler (struct intr_frame *f)
     case SYS_HALT:
     {
       shutdown_power_off();
+      break;
     }
     case SYS_EXIT:
     {
@@ -49,11 +58,29 @@ syscall_handler (struct intr_frame *f)
       exit (args[0]);
       break;
     }
+    case SYS_WAIT:
+    { 
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      f->eax = wait (args[0]);
+      break;
+    }
     case SYS_CREATE:
     {
       copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * 2);
       f->eax = create (args[0], args[1]);
       break; 
+    }
+    case SYS_REMOVE:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      f->eax = remove (args[0]);
+      break;
+    }
+    case SYS_READ:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * 3);
+      f->eax = read (args[0], args[1], args[2]);
+      break;
     }
     case SYS_WRITE:
     {
@@ -65,6 +92,36 @@ syscall_handler (struct intr_frame *f)
     {
       copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
       f->eax = open (args[0]);
+      break;
+    }
+    case SYS_FILESIZE:
+    { 
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      f->eax = filesize (args[0]);
+      break;
+    }
+    case SYS_SEEK:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * 2);
+      seek (args[0], args[1]);
+      break;
+    }
+    case SYS_TELL:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      f->eax = tell (args[0]);
+      break;
+    }
+    case SYS_EXEC:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      f->eax = exec (args[0]);
+      break;
+    }
+    case SYS_CLOSE:
+    {
+      copy_in (args, (uint32_t *) f->esp + 1, sizeof *args);
+      close (args[0]);
       break;
     }
   }
@@ -161,9 +218,35 @@ struct file *get_file (int fd)
 void exit (int status)
 {
   struct thread *cur = thread_current();
-  cur->exit_status = status;
+  cur->c_h->exit_status = status;
   
   thread_exit();
+}
+
+int read (int fd, void *buffer, unsigned length)
+{
+  if (fd == 0) {
+    int iter;
+    for (iter = 0; iter < length; iter++)
+      input_getc ();
+    return length;
+  }
+  
+  sema_down (&rw_sema);
+  struct file *read_file = get_file (fd);
+
+  if (!read_file) {
+    sema_up (&rw_sema);
+    return -1;
+  }
+
+  if (!verify_user (buffer))
+    exit (-1);
+
+  int bytes_read = file_read (read_file, buffer, length);
+  sema_up (&rw_sema);
+
+  return bytes_read;
 }
 
 int write (int fd, const void *buffer, unsigned length)
@@ -231,4 +314,81 @@ int open (const char *file)
   }
   sema_up (&rw_sema);
   return -1;
+}
+
+int filesize (int fd)
+{
+  int size;
+
+  sema_down (&rw_sema);
+  struct file *f = get_file (fd);
+  size = file_length (f);
+  sema_up (&rw_sema); 
+
+  return size;
+}
+
+int wait (int pid)
+{
+  return process_wait (pid);
+}
+
+bool remove (const char *file)
+{
+  bool success;
+  sema_down (&rw_sema);
+  success = filesys_remove (file);
+  sema_up (&rw_sema);
+  
+  return success;
+}
+
+void seek (int fd, unsigned position)
+{
+  sema_down (&rw_sema);
+  struct file *seek_file = get_file (fd);
+
+  if (seek_file)
+    file_seek (seek_file, position);
+
+  sema_up (&rw_sema);
+}
+
+unsigned tell (int fd)
+{
+  unsigned pos;
+
+  sema_down (&rw_sema);
+  struct file *tell_file = get_file (fd);
+  pos = file_tell (tell_file);
+  sema_up (&rw_sema);
+
+  return pos;
+}
+
+int exec (const char *cmd_line)
+{
+  if (!cmd_line)
+    return -1;
+    
+  if (!verify_user (cmd_line))
+    exit (-1);
+
+  static char *cmd_line_;
+  cmd_line_ = copy_in_string (cmd_line);
+  int pid = process_execute (cmd_line_);
+
+  if (pid == TID_ERROR)
+    return -1;
+
+  return pid;
+}
+
+void close (int fd)
+{
+  sema_down (&rw_sema);
+  struct file *f = get_file (fd);
+  file_close (f);
+  //list_remove (&f->file_elem);
+  sema_up (&rw_sema);
 }

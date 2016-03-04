@@ -10,12 +10,12 @@ struct exec_helper
   struct semaphore ld_sema;
   bool ld_success;
   struct thread *parent;
-  //struct list children;  
 };
 
 static void *push (uint8_t *kpage, size_t *offset, const void *buf, size_t size);
 tid_t process_execute (const char *file_name);
 static void start_process (void *file_name_);//, struct exec_helper *parent_exec);
+struct child_helper *process_get_child (tid_t child_tid);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
